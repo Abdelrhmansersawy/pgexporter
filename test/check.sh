@@ -141,6 +141,15 @@ cleanup() {
         --instr-profile=$COVERAGE_DIR/coverage.profdata \
         --format=text > $COVERAGE_DIR/coverage-pgexporter-admin.txt
 
+      echo "Generating $COVERAGE_DIR/coverage.lcov for Coveralls"
+      llvm-cov export "$BIN_PATH/libpgexporter.so" \
+        --instr-profile=$COVERAGE_DIR/coverage.profdata \
+        --format=lcov \
+        --object="$BIN_PATH/pgexporter/pgexporter" \
+        --object="$BIN_PATH/pgexporter/pgexporter-cli" \
+        --object="$BIN_PATH/pgexporter/pgexporter-admin" \
+        > $COVERAGE_DIR/coverage.lcov 2>&1
+
        echo "Coverage --> $COVERAGE_DIR"
      fi
      echo "Logs --> $LOG_DIR, $PG_LOG_DIR"

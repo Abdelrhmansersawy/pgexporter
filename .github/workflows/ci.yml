@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - main
+    - coverall
   pull_request:
     branches:
     - main
@@ -147,6 +148,16 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat /tmp/pgexporter-test/coverage/coverage-report-*.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage to Coveralls
+        if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: /tmp/pgexporter-test/coverage/coverage.lcov
+          format: lcov
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
 
       - name: Upload All Coverage Reports as Artifact
         if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
