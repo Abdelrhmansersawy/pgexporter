@@ -145,13 +145,17 @@ cleanup() {
       llvm-cov export "$BIN_PATH/libpgexporter.so" \
         --instr-profile=$COVERAGE_DIR/coverage.profdata \
         --format=lcov \
-        --object="$BIN_PATH/pgexporter/pgexporter" \
-        --object="$BIN_PATH/pgexporter/pgexporter-cli" \
-        --object="$BIN_PATH/pgexporter/pgexporter-admin" \
-        > $COVERAGE_DIR/coverage.lcov 2>&1
-      
+        > $COVERAGE_DIR/coverage.lcov 2>$COVERAGE_DIR/coverage-export.log
+
+      echo "llvm-cov export log:"
+      cat $COVERAGE_DIR/coverage-export.log
+
       echo "Fixing paths in $COVERAGE_DIR/coverage.lcov"
       sed -i "s|$PROJECT_DIRECTORY/||g" $COVERAGE_DIR/coverage.lcov
+
+      echo "LCOV file stats: $(wc -l < $COVERAGE_DIR/coverage.lcov) lines"
+      echo "First 20 lines of LCOV:"
+      head -20 $COVERAGE_DIR/coverage.lcov
 
        echo "Coverage --> $COVERAGE_DIR"
      fi

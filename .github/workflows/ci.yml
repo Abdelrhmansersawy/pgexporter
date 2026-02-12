@@ -149,6 +149,18 @@ jobs:
           cat /tmp/pgexporter-test/coverage/coverage-report-*.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+      - name: Debug LCOV file
+        if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
+        run: |
+          echo "LCOV file size:"
+          wc -l /tmp/pgexporter-test/coverage/coverage.lcov || echo "File not found"
+          echo "---"
+          echo "First 30 lines:"
+          head -30 /tmp/pgexporter-test/coverage/coverage.lcov || echo "Cannot read file"
+          echo "---"
+          echo "Export log:"
+          cat /tmp/pgexporter-test/coverage/coverage-export.log || echo "No export log"
+
       - name: Upload coverage to Coveralls
         if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
         uses: coverallsapp/github-action@v2
