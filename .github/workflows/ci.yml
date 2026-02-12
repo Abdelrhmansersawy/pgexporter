@@ -161,9 +161,19 @@ jobs:
           echo "=== Checking build artifacts ==="
           ls -la $BUILD_SRC/ || echo "Build src dir not found"
 
+          # Merge profraw files into profdata if not already done
           if [ ! -f "$COVERAGE_DIR/coverage.profdata" ]; then
-            echo "ERROR: coverage.profdata not found!"
-            exit 1
+            echo "=== coverage.profdata not found, merging profraw files ==="
+            PROFRAW_FILES=$(find $COVERAGE_DIR -name "*.profraw" 2>/dev/null)
+            if [ -z "$PROFRAW_FILES" ]; then
+              echo "ERROR: No .profraw files found in $COVERAGE_DIR"
+              find /tmp -name "*.profraw" 2>/dev/null || echo "No profraw files anywhere in /tmp"
+              exit 1
+            fi
+            echo "Found profraw files:"
+            echo "$PROFRAW_FILES"
+            llvm-profdata merge -sparse $COVERAGE_DIR/*.profraw -o $COVERAGE_DIR/coverage.profdata
+            echo "Merged profdata successfully"
           fi
 
           # Find the .so file
