@@ -149,17 +149,62 @@ jobs:
           cat /tmp/pgexporter-test/coverage/coverage-report-*.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Debug LCOV file
+      - name: Generate LCOV for Coveralls
         if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
         run: |
-          echo "LCOV file size:"
-          wc -l /tmp/pgexporter-test/coverage/coverage.lcov || echo "File not found"
-          echo "---"
-          echo "First 30 lines:"
-          head -30 /tmp/pgexporter-test/coverage/coverage.lcov || echo "Cannot read file"
-          echo "---"
-          echo "Export log:"
-          cat /tmp/pgexporter-test/coverage/coverage-export.log || echo "No export log"
+          COVERAGE_DIR="/tmp/pgexporter-test/coverage"
+          BUILD_SRC="/home/runner/work/pgexporter/pgexporter/build/src"
+          PROJECT_DIR="/home/runner/work/pgexporter/pgexporter"
+
+          echo "=== Checking coverage artifacts ==="
+          ls -la $COVERAGE_DIR/ || echo "Coverage dir not found"
+          echo "=== Checking build artifacts ==="
+          ls -la $BUILD_SRC/ || echo "Build src dir not found"
+
+          if [ ! -f "$COVERAGE_DIR/coverage.profdata" ]; then
+            echo "ERROR: coverage.profdata not found!"
+            exit 1
+          fi
+
+          # Find the .so file
+          if [ -f "$BUILD_SRC/libpgexporter.so" ]; then
+            SO_PATH="$BUILD_SRC/libpgexporter.so"
+          elif [ -f "$BUILD_SRC/pgexporter/libpgexporter.so" ]; then
+            SO_PATH="$BUILD_SRC/pgexporter/libpgexporter.so"
+          else
+            echo "ERROR: Cannot find libpgexporter.so"
+            ls -R $BUILD_SRC
+            exit 1
+          fi
+          echo "Using SO: $SO_PATH"
+
+          # Build object args for additional binaries
+          BIN_DIR=$(dirname "$SO_PATH")
+          OBJECTS=""
+          for bin in pgexporter pgexporter-cli pgexporter-admin; do
+            if [ -f "$BIN_DIR/$bin" ]; then
+              OBJECTS="$OBJECTS --object=$BIN_DIR/$bin"
+              echo "Adding object: $BIN_DIR/$bin"
+            fi
+          done
+
+          echo "=== Running llvm-cov export ==="
+          llvm-cov export "$SO_PATH" \
+            --instr-profile="$COVERAGE_DIR/coverage.profdata" \
+            --format=lcov \
+            $OBJECTS \
+            > "$COVERAGE_DIR/coverage.lcov" 2>"$COVERAGE_DIR/export-errors.log"
+
+          echo "=== Export errors (if any): ==="
+          cat "$COVERAGE_DIR/export-errors.log"
+
+          echo "=== Fixing paths ==="
+          sed -i "s|${PROJECT_DIR}/||g" "$COVERAGE_DIR/coverage.lcov"
+
+          echo "=== LCOV stats ==="
+          echo "Lines: $(wc -l < $COVERAGE_DIR/coverage.lcov)"
+          echo "First 20 lines:"
+          head -20 "$COVERAGE_DIR/coverage.lcov"
 
       - name: Upload coverage to Coveralls
         if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
