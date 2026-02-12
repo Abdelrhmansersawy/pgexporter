@@ -149,6 +149,9 @@ cleanup() {
         --object="$BIN_PATH/pgexporter/pgexporter-cli" \
         --object="$BIN_PATH/pgexporter/pgexporter-admin" \
         > $COVERAGE_DIR/coverage.lcov 2>&1
+      
+      echo "Fixing paths in $COVERAGE_DIR/coverage.lcov"
+      sed -i "s|$PROJECT_DIRECTORY/||g" $COVERAGE_DIR/coverage.lcov
 
        echo "Coverage --> $COVERAGE_DIR"
      fi
@@ -198,22 +201,23 @@ start_postgresql_container() {
     fi
   fi
 
-  $CONTAINER_ENGINE run -p $PORT:5432 -v "$PG_LOG_DIR:/pglog:z" -v "$PGCONF_DIRECTORY:/conf:z"\
+  $CONTAINER_ENGINE run --network host -v "$PG_LOG_DIR:/pglog:z" -v "$PGCONF_DIRECTORY:/conf:z"\
   --name $CONTAINER_NAME -d \
   -e PG_DATABASE=$PG_DATABASE \
   -e PG_USER_NAME=$PG_USER_NAME \
   -e PG_USER_PASSWORD=$PG_USER_PASSWORD \
   -e PG_LOG_LEVEL=debug5 \
+  -e PGPORT=$PORT \
   $ACTUAL_IMAGE
 
   echo "Checking PostgreSQL 17 container readiness"
   sleep 3
-  if $CONTAINER_ENGINE exec $CONTAINER_NAME /usr/pgsql-17/bin/pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+  if $CONTAINER_ENGINE exec $CONTAINER_NAME /usr/pgsql-17/bin/pg_isready -h localhost -p $PORT >/dev/null 2>&1; then
     echo "PostgreSQL 17 is ready!"
   else
     echo "Wait for 10 seconds and retry"
     sleep 10
-    if $CONTAINER_ENGINE exec $CONTAINER_NAME /usr/pgsql-17/bin/pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+    if $CONTAINER_ENGINE exec $CONTAINER_NAME /usr/pgsql-17/bin/pg_isready -h localhost -p $PORT >/dev/null 2>&1; then
       echo "PostgreSQL 17 is ready!"
     else
       echo "Printing container logs..."
