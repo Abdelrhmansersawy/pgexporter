@@ -151,39 +151,50 @@ jobs:
 
       - name: Generate LCOV for Coveralls
         if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
+        working-directory: /home/runner/work/pgexporter/pgexporter/
         run: |
+          set -x
           COVERAGE_DIR="/tmp/pgexporter-test/coverage"
-          BUILD_SRC="/home/runner/work/pgexporter/pgexporter/build/src"
-          PROJECT_DIR="/home/runner/work/pgexporter/pgexporter"
+          PROJECT_DIR="$(pwd)"
+          BUILD_SRC="$PROJECT_DIR/build/src"
 
-          echo "=== Checking coverage artifacts ==="
-          ls -la $COVERAGE_DIR/ || echo "Coverage dir not found"
-          echo "=== Checking build artifacts ==="
-          ls -la $BUILD_SRC/ || echo "Build src dir not found"
+          echo "=== Full coverage dir contents ==="
+          ls -laR $COVERAGE_DIR/ 2>/dev/null || echo "Coverage dir not found"
 
-          # Merge profraw files into profdata if not already done
-          if [ ! -f "$COVERAGE_DIR/coverage.profdata" ]; then
-            echo "=== coverage.profdata not found, merging profraw files ==="
-            PROFRAW_FILES=$(find $COVERAGE_DIR -name "*.profraw" 2>/dev/null)
-            if [ -z "$PROFRAW_FILES" ]; then
-              echo "ERROR: No .profraw files found in $COVERAGE_DIR"
-              find /tmp -name "*.profraw" 2>/dev/null || echo "No profraw files anywhere in /tmp"
+          echo "=== Search for profraw files ==="
+          find /tmp -name "*.profraw" 2>/dev/null || echo "No profraw files under /tmp"
+
+          echo "=== Search for profdata files ==="
+          find /tmp -name "*.profdata" 2>/dev/null || echo "No profdata files under /tmp"
+
+          echo "=== Build src contents ==="
+          ls -la $BUILD_SRC/ 2>/dev/null || echo "Build src dir not found"
+          ls -la $BUILD_SRC/pgexporter/ 2>/dev/null || echo "Build src/pgexporter subdir not found"
+
+          # Find profdata - check if cleanup already created it
+          PROFDATA=""
+          if [ -f "$COVERAGE_DIR/coverage.profdata" ]; then
+            PROFDATA="$COVERAGE_DIR/coverage.profdata"
+            echo "Found existing profdata: $PROFDATA"
+          else
+            # Try to merge profraw files
+            PROFRAW_COUNT=$(find /tmp -name "*.profraw" 2>/dev/null | wc -l)
+            if [ "$PROFRAW_COUNT" -gt 0 ]; then
+              echo "Found $PROFRAW_COUNT profraw files, merging..."
+              mkdir -p $COVERAGE_DIR
+              find /tmp -name "*.profraw" -exec llvm-profdata merge -sparse {} + -o $COVERAGE_DIR/coverage.profdata
+              PROFDATA="$COVERAGE_DIR/coverage.profdata"
+            else
+              echo "ERROR: No profraw or profdata files found anywhere"
               exit 1
             fi
-            echo "Found profraw files:"
-            echo "$PROFRAW_FILES"
-            llvm-profdata merge -sparse $COVERAGE_DIR/*.profraw -o $COVERAGE_DIR/coverage.profdata
-            echo "Merged profdata successfully"
           fi
 
           # Find the .so file
-          if [ -f "$BUILD_SRC/libpgexporter.so" ]; then
-            SO_PATH="$BUILD_SRC/libpgexporter.so"
-          elif [ -f "$BUILD_SRC/pgexporter/libpgexporter.so" ]; then
-            SO_PATH="$BUILD_SRC/pgexporter/libpgexporter.so"
-          else
+          SO_PATH=$(find $BUILD_SRC -name "libpgexporter.so" -type f 2>/dev/null | head -1)
+          if [ -z "$SO_PATH" ]; then
             echo "ERROR: Cannot find libpgexporter.so"
-            ls -R $BUILD_SRC
+            find $PROJECT_DIR/build -type f -name "*.so" 2>/dev/null
             exit 1
           fi
           echo "Using SO: $SO_PATH"
@@ -200,21 +211,24 @@ jobs:
 
           echo "=== Running llvm-cov export ==="
           llvm-cov export "$SO_PATH" \
-            --instr-profile="$COVERAGE_DIR/coverage.profdata" \
+            --instr-profile="$PROFDATA" \
             --format=lcov \
             $OBJECTS \
-            > "$COVERAGE_DIR/coverage.lcov" 2>"$COVERAGE_DIR/export-errors.log"
+            > "$COVERAGE_DIR/coverage.lcov" 2>"$COVERAGE_DIR/export-errors.log" || true
 
-          echo "=== Export errors (if any): ==="
+          echo "=== Export errors (if any) ==="
           cat "$COVERAGE_DIR/export-errors.log"
 
           echo "=== Fixing paths ==="
           sed -i "s|${PROJECT_DIR}/||g" "$COVERAGE_DIR/coverage.lcov"
 
-          echo "=== LCOV stats ==="
-          echo "Lines: $(wc -l < $COVERAGE_DIR/coverage.lcov)"
-          echo "First 20 lines:"
-          head -20 "$COVERAGE_DIR/coverage.lcov"
+          LCOV_LINES=$(wc -l < "$COVERAGE_DIR/coverage.lcov")
+          echo "=== LCOV stats: $LCOV_LINES lines ==="
+          head -30 "$COVERAGE_DIR/coverage.lcov"
+
+          if [ "$LCOV_LINES" -lt 2 ]; then
+            echo "WARNING: LCOV file appears empty"
+          fi
 
       - name: Upload coverage to Coveralls
         if: matrix.compiler == 'clang' && matrix.build_type == 'Debug'
